@@ -19,9 +19,6 @@ const appState = {
     }
 };
 
-// Flag to prevent double file selection
-let isFileSelecting = false;
-
 // DOM Elements
 const fileInput = document.getElementById('fileInput');
 const dropZone = document.getElementById('dropZone');
@@ -145,28 +142,14 @@ function populateColumnCheckboxes() {
 
 // Handle file selection from input
 function handleFileSelect(event) {
-    // Prevent multiple file selection triggers
-    if (isFileSelecting) {
-        return;
-    }
-    isFileSelecting = true;
-
     const files = Array.from(event.target.files);
-    if (files.length === 0) {
-        isFileSelecting = false;
-        return;
-    }
-
+    if (files.length === 0) return;
+    
     addFiles(files);
-
+    
     // Reset the file input value so the same file can be selected again
     // This ensures the change event will fire even if the same file is selected
     event.target.value = '';
-
-    // Reset the flag after a short delay to allow the event cycle to complete
-    setTimeout(() => {
-        isFileSelecting = false;
-    }, 100);
 }
 
 // Handle drag over

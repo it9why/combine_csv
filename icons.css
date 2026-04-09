@@ -25,6 +25,10 @@
 .fa-exclamation-circle::before { content: "⚠️"; }
 .fa-check-circle::before { content: "✅"; }
 .fa-times::before { content: "✕"; }
+.fa-filter::before { content: "🔍"; }
+.fa-play-circle::before { content: "▶️"; }
+.fa-undo::before { content: "↩️"; }
+.fa-chart-line::before { content: "📉"; }
 
 /* Size modifiers */
 .fa-2x { font-size: 1.5em; }
