@@ -1,0 +1,825 @@
+// CSV Combiner - Offline Tool
+// Main application state
+const appState = {
+    files: [],
+    combinedData: [],
+    headers: [],
+    originalCombinedData: [], // Store original before processing
+    isProcessing: false,
+    processingStats: {
+        originalRows: 0,
+        rowsRemoved: 0,
+        duplicateRows: 0,
+        remainingRows: 0
+    },
+    processingOptions: {
+        removeDuplicates: false,
+        uniqueColumns: [],
+        enabledUniqueColumns: false
+    }
+};
+
+// DOM Elements
+const fileInput = document.getElementById('fileInput');
+const dropZone = document.getElementById('dropZone');
+const fileList = document.getElementById('fileList');
+const combineBtn = document.getElementById('combineBtn');
+const clearBtn = document.getElementById('clearBtn');
+const exportBtn = document.getElementById('exportBtn');
+const previewTable = document.getElementById('previewTable');
+const tableHeader = document.getElementById('tableHeader');
+const tableBody = document.getElementById('tableBody');
+const noDataMessage = document.getElementById('noDataMessage');
+const fileCount = document.getElementById('fileCount');
+const totalRows = document.getElementById('totalRows');
+const columnCount = document.getElementById('columnCount');
+const status = document.getElementById('status');
+
+// New DOM elements for processing
+const removeDuplicatesCheckbox = document.getElementById('removeDuplicates');
+const enableUniqueColumnsCheckbox = document.getElementById('enableUniqueColumns');
+const uniqueColumnsSelector = document.getElementById('uniqueColumnsSelector');
+const columnsCheckboxList = document.getElementById('columnsCheckboxList');
+const applyProcessingBtn = document.getElementById('applyProcessingBtn');
+const resetProcessingBtn = document.getElementById('resetProcessingBtn');
+const processingStats = document.getElementById('processingStats');
+const originalRows = document.getElementById('originalRows');
+const rowsRemoved = document.getElementById('rowsRemoved');
+const remainingRows = document.getElementById('remainingRows');
+const duplicateRows = document.getElementById('duplicateRows');
+
+// Initialize the application
+function init() {
+    setupEventListeners();
+    updateUI();
+}
+
+// Set up event listeners
+function setupEventListeners() {
+    // File input change
+    fileInput.addEventListener('change', handleFileSelect);
+    
+    // Drag and drop
+    dropZone.addEventListener('dragover', handleDragOver);
+    dropZone.addEventListener('dragleave', handleDragLeave);
+    dropZone.addEventListener('drop', handleDrop);
+    
+    // Button clicks
+    combineBtn.addEventListener('click', combineFiles);
+    clearBtn.addEventListener('click', clearAll);
+    exportBtn.addEventListener('click', exportCSV);
+    applyProcessingBtn.addEventListener('click', applyProcessing);
+    resetProcessingBtn.addEventListener('click', resetToOriginal);
+    
+    // Processing checkboxes
+    removeDuplicatesCheckbox.addEventListener('change', updateProcessingUI);
+    enableUniqueColumnsCheckbox.addEventListener('change', updateProcessingUI);
+    
+    // Click on drop zone to trigger file input
+    dropZone.addEventListener('click', () => fileInput.click());
+}
+
+// Update processing UI based on checkbox states
+function updateProcessingUI() {
+    // Show/hide unique columns selector
+    if (enableUniqueColumnsCheckbox.checked) {
+        uniqueColumnsSelector.style.display = 'block';
+        populateColumnCheckboxes();
+    } else {
+        uniqueColumnsSelector.style.display = 'none';
+        appState.processingOptions.uniqueColumns = [];
+    }
+    
+    // Update processing options
+    appState.processingOptions.removeDuplicates = removeDuplicatesCheckbox.checked;
+    appState.processingOptions.enabledUniqueColumns = enableUniqueColumnsCheckbox.checked;
+    
+    // Enable/disable apply button
+    applyProcessingBtn.disabled = !appState.combinedData.length;
+}
+
+// Populate column checkboxes based on current headers
+function populateColumnCheckboxes() {
+    columnsCheckboxList.innerHTML = '';
+    
+    if (!appState.headers.length) return;
+    
+    // Skip the first column (Filename) for uniqueness checks
+    const columnsToShow = appState.headers.slice(1);
+    
+    columnsToShow.forEach((header, index) => {
+        const columnIndex = index + 1; // +1 because we skipped Filename column
+        const checkboxId = `column-checkbox-${columnIndex}`;
+        
+        const item = document.createElement('div');
+        item.className = 'column-checkbox-item';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = checkboxId;
+        checkbox.value = columnIndex;
+        checkbox.checked = appState.processingOptions.uniqueColumns.includes(columnIndex);
+        
+        const label = document.createElement('label');
+        label.htmlFor = checkboxId;
+        label.textContent = header;
+        
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                if (!appState.processingOptions.uniqueColumns.includes(columnIndex)) {
+                    appState.processingOptions.uniqueColumns.push(columnIndex);
+                }
+            } else {
+                const idx = appState.processingOptions.uniqueColumns.indexOf(columnIndex);
+                if (idx > -1) {
+                    appState.processingOptions.uniqueColumns.splice(idx, 1);
+                }
+            }
+        });
+        
+        item.appendChild(checkbox);
+        item.appendChild(label);
+        columnsCheckboxList.appendChild(item);
+    });
+}
+
+// Handle file selection from input
+function handleFileSelect(event) {
+    const files = Array.from(event.target.files);
+    if (files.length === 0) return;
+    
+    addFiles(files);
+}
+
+// Handle drag over
+function handleDragOver(event) {
+    event.preventDefault();
+    dropZone.style.borderColor = '#3498db';
+    dropZone.style.backgroundColor = '#f0f7ff';
+}
+
+// Handle drag leave
+function handleDragLeave(event) {
+    event.preventDefault();
+    dropZone.style.borderColor = '#bdc3c7';
+    dropZone.style.backgroundColor = '#f9f9f9';
+}
+
+// Handle drop
+function handleDrop(event) {
+    event.preventDefault();
+    handleDragLeave(event);
+    
+    const files = Array.from(event.dataTransfer.files).filter(file => 
+        file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')
+    );
+    
+    if (files.length === 0) {
+        showError('Please drop CSV files only');
+        return;
+    }
+    
+    addFiles(files);
+}
+
+// Add files to the application state
+function addFiles(files) {
+    const newFiles = files.map(file => ({
+        file: file,
+        name: file.name,
+        size: formatFileSize(file.size),
+        content: null,
+        parsed: null,
+        error: null
+    }));
+    
+    appState.files.push(...newFiles);
+    updateFileList();
+    updateUI();
+    
+    // Read and parse each file
+    newFiles.forEach(fileObj => {
+        readFile(fileObj);
+    });
+}
+
+// Read and parse a file
+function readFile(fileObj) {
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        try {
+            const text = e.target.result;
+            fileObj.content = text;
+            fileObj.parsed = parseCSV(text);
+            fileObj.error = null;
+            
+            // Validate headers if we already have some
+            if (appState.headers.length === 0 && fileObj.parsed.headers) {
+                appState.headers = fileObj.parsed.headers;
+            }
+            
+            updateFileList();
+            updateUI();
+        } catch (error) {
+            fileObj.error = error.message;
+            updateFileList();
+            updateUI();
+            showError(`Error parsing ${fileObj.name}: ${error.message}`);
+        }
+    };
+    
+    reader.onerror = function() {
+        fileObj.error = 'Failed to read file';
+        updateFileList();
+        updateUI();
+        showError(`Failed to read ${fileObj.name}`);
+    };
+    
+    reader.readAsText(fileObj.file);
+}
+
+// Parse CSV text into headers and rows
+function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length === 0) {
+        throw new Error('Empty file');
+    }
+    
+    // Parse headers (first line)
+    const headers = parseCSVLine(lines[0]);
+    
+    // Parse data rows
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+        if (lines[i].trim() === '') continue; // Skip empty lines
+        
+        const values = parseCSVLine(lines[i]);
+        if (values.length !== headers.length) {
+            throw new Error(`Row ${i+1} has ${values.length} columns, expected ${headers.length}`);
+        }
+        
+        rows.push(values);
+    }
+    
+    return { headers, rows };
+}
+
+// Parse a single CSV line, handling quotes
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+        
+        if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+                // Double quote inside quoted field
+                current += '"';
+                i++; // Skip next quote
+            } else {
+                // Start or end of quoted field
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            // End of field
+            result.push(current);
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    
+    // Add the last field
+    result.push(current);
+    
+    return result;
+}
+
+// Update the file list UI
+function updateFileList() {
+    fileList.innerHTML = '';
+    
+    appState.files.forEach((fileObj, index) => {
+        const li = document.createElement('li');
+        
+        const leftDiv = document.createElement('div');
+        leftDiv.style.display = 'flex';
+        leftDiv.style.alignItems = 'center';
+        
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-file-csv';
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = fileObj.name;
+        nameSpan.style.fontWeight = '500';
+        
+        leftDiv.appendChild(icon);
+        leftDiv.appendChild(nameSpan);
+        
+        const rightDiv = document.createElement('div');
+        rightDiv.style.display = 'flex';
+        rightDiv.style.alignItems = 'center';
+        rightDiv.style.gap = '10px';
+        
+        if (fileObj.error) {
+            const errorSpan = document.createElement('span');
+            errorSpan.textContent = 'Error';
+            errorSpan.style.color = '#e74c3c';
+            errorSpan.style.fontSize = '0.85rem';
+            errorSpan.style.fontWeight = '500';
+            rightDiv.appendChild(errorSpan);
+        } else if (fileObj.parsed) {
+            const rowCount = fileObj.parsed.rows.length;
+            const rowSpan = document.createElement('span');
+            rowSpan.textContent = `${rowCount} row${rowCount !== 1 ? 's' : ''}`;
+            rowSpan.style.color = '#27ae60';
+            rowSpan.style.fontSize = '0.85rem';
+            rowSpan.style.fontWeight = '500';
+            rightDiv.appendChild(rowSpan);
+        }
+        
+        const sizeSpan = document.createElement('span');
+        sizeSpan.className = 'file-size';
+        sizeSpan.textContent = fileObj.size;
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+        removeBtn.style.background = 'none';
+        removeBtn.style.border = 'none';
+        removeBtn.style.color = '#e74c3c';
+        removeBtn.style.cursor = 'pointer';
+        removeBtn.style.padding = '5px';
+        removeBtn.style.borderRadius = '4px';
+        removeBtn.title = 'Remove file';
+        
+        removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeFile(index);
+        });
+        
+        rightDiv.appendChild(sizeSpan);
+        rightDiv.appendChild(removeBtn);
+        
+        li.appendChild(leftDiv);
+        li.appendChild(rightDiv);
+        fileList.appendChild(li);
+    });
+    
+    fileCount.textContent = appState.files.length;
+}
+
+// Remove a file from the list
+function removeFile(index) {
+    appState.files.splice(index, 1);
+    
+    // Reset combined data if files were removed
+    if (appState.files.length === 0) {
+        appState.combinedData = [];
+        appState.headers = [];
+        appState.originalCombinedData = [];
+        resetProcessingOptions();
+    }
+    
+    updateFileList();
+    updateUI();
+}
+
+// Reset processing options
+function resetProcessingOptions() {
+    appState.processingOptions = {
+        removeDuplicates: false,
+        uniqueColumns: [],
+        enabledUniqueColumns: false
+    };
+    
+    removeDuplicatesCheckbox.checked = false;
+    enableUniqueColumnsCheckbox.checked = false;
+    uniqueColumnsSelector.style.display = 'none';
+    processingStats.style.display = 'none';
+}
+
+// Combine all loaded files
+function combineFiles() {
+    if (appState.files.length === 0) {
+        showError('No files to combine');
+        return;
+    }
+    
+    // Check if all files are parsed
+    const unparsedFiles = appState.files.filter(f => !f.parsed && !f.error);
+    if (unparsedFiles.length > 0) {
+        showError('Some files are still being processed. Please wait.');
+        return;
+    }
+    
+    // Check for errors
+    const errorFiles = appState.files.filter(f => f.error);
+    if (errorFiles.length > 0) {
+        showError('Some files have errors. Please fix or remove them.');
+        return;
+    }
+    
+    // Validate that all files have the same headers
+    let commonHeaders = null;
+    for (const fileObj of appState.files) {
+        if (!fileObj.parsed) continue;
+        
+        if (commonHeaders === null) {
+            commonHeaders = fileObj.parsed.headers;
+        } else if (!arraysEqual(commonHeaders, fileObj.parsed.headers)) {
+            showError('Files have different headers. All CSV files must have identical headers.');
+            return;
+        }
+    }
+    
+    if (!commonHeaders) {
+        showError('No valid headers found in files');
+        return;
+    }
+    
+    // Combine data
+    appState.headers = ['Filename', ...commonHeaders];
+    appState.combinedData = [];
+    
+    for (const fileObj of appState.files) {
+        if (!fileObj.parsed) continue;
+        
+        for (const row of fileObj.parsed.rows) {
+            appState.combinedData.push([fileObj.name, ...row]);
+        }
+    }
+    
+    // Store original data
+    appState.originalCombinedData = JSON.parse(JSON.stringify(appState.combinedData));
+    
+    // Reset processing options
+    resetProcessingOptions();
+    
+    // Update UI
+    updatePreviewTable();
+    updateUI();
+    updateProcessingUI();
+    showSuccess(`Successfully combined ${appState.files.length} files into ${appState.combinedData.length} rows`);
+}
+
+// Apply processing to combined data
+function applyProcessing() {
+    if (appState.combinedData.length === 0) {
+        showError('No data to process');
+        return;
+    }
+    
+    // Start with original data
+    let processedData = JSON.parse(JSON.stringify(appState.originalCombinedData));
+    let stats = {
+        originalRows: processedData.length,
+        rowsRemoved: 0,
+        duplicateRows: 0,
+        remainingRows: processedData.length
+    };
+    
+    // Apply duplicate removal (all columns must match)
+    if (appState.processingOptions.removeDuplicates) {
+        const seen = new Set();
+        const uniqueData = [];
+        let duplicates = 0;
+        
+        for (const row of processedData) {
+            const rowKey = JSON.stringify(row);
+            if (!seen.has(rowKey)) {
+                seen.add(rowKey);
+                uniqueData.push(row);
+            } else {
+                duplicates++;
+            }
+        }
+        
+        stats.rowsRemoved += (processedData.length - uniqueData.length);
+        stats.duplicateRows += duplicates;
+        processedData = uniqueData;
+    }
+    
+    // Apply unique column constraints
+    if (appState.processingOptions.enabledUniqueColumns && 
+        appState.processingOptions.uniqueColumns.length > 0) {
+        
+        const seenKeys = new Set();
+        const uniqueData = [];
+        let columnDuplicates = 0;
+        
+        for (const row of processedData) {
+            // Create a key from the selected columns
+            const keyParts = appState.processingOptions.uniqueColumns.map(colIndex => {
+                return row[colIndex] || '';
+            });
+            const rowKey = JSON.stringify(keyParts);
+            
+            if (!seenKeys.has(rowKey)) {
+                seenKeys.add(rowKey);
+                uniqueData.push(row);
+            } else {
+                columnDuplicates++;
+            }
+        }
+        
+        stats.rowsRemoved += (processedData.length - uniqueData.length);
+        stats.duplicateRows += columnDuplicates;
+        processedData = uniqueData;
+    }
+    
+    // Update stats
+    stats.remainingRows = processedData.length;
+    appState.processingStats = stats;
+    
+    // Update combined data
+    appState.combinedData = processedData;
+    
+    // Update UI
+    updatePreviewTable();
+    updateProcessingStats();
+    updateUI();
+    showSuccess(`Applied processing: ${stats.rowsRemoved} rows removed, ${stats.remainingRows} rows remaining`);
+}
+
+// Reset to original data
+function resetToOriginal() {
+    if (appState.originalCombinedData.length === 0) {
+        showError('No original data to reset to');
+        return;
+    }
+    
+    appState.combinedData = JSON.parse(JSON.stringify(appState.originalCombinedData));
+    resetProcessingOptions();
+    
+    // Update UI
+    updatePreviewTable();
+    updateUI();
+    updateProcessingUI();
+    showSuccess('Reset to original combined data');
+}
+
+// Update processing stats display
+function updateProcessingStats() {
+    if (appState.processingStats.originalRows > 0) {
+        processingStats.style.display = 'block';
+        originalRows.textContent = appState.processingStats.originalRows;
+        rowsRemoved.textContent = appState.processingStats.rowsRemoved;
+        remainingRows.textContent = appState.processingStats.remainingRows;
+        duplicateRows.textContent = appState.processingStats.duplicateRows;
+    } else {
+        processingStats.style.display = 'none';
+    }
+}
+
+// Update the preview table
+function updatePreviewTable() {
+    // Clear existing content
+    tableHeader.innerHTML = '';
+    tableBody.innerHTML = '';
+    
+    if (appState.combinedData.length === 0 || appState.headers.length === 0) {
+        previewTable.style.display = 'none';
+        noDataMessage.style.display = 'flex';
+        return;
+    }
+    
+    previewTable.style.display = 'table';
+    noDataMessage.style.display = 'none';
+    
+    // Create header row
+    const headerRow = document.createElement('tr');
+    appState.headers.forEach(header => {
+        const th = document.createElement('th');
+        th.textContent = header;
+        headerRow.appendChild(th);
+    });
+    tableHeader.appendChild(headerRow);
+    
+    // Create data rows (limit to 100 for performance)
+    const displayRows = appState.combinedData.slice(0, 100);
+    displayRows.forEach(row => {
+        const tr = document.createElement('tr');
+        row.forEach(cell => {
+            const td = document.createElement('td');
+            td.textContent = cell;
+            tr.appendChild(td);
+        });
+        tableBody.appendChild(tr);
+    });
+    
+    // Show message if there are more rows
+    if (appState.combinedData.length > 100) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = appState.headers.length;
+        td.textContent = `... and ${appState.combinedData.length - 100} more rows (export to see all)`;
+        td.style.textAlign = 'center';
+        td.style.fontStyle = 'italic';
+        td.style.color = '#7f8c8d';
+        td.style.padding = '20px';
+        tr.appendChild(td);
+        tableBody.appendChild(tr);
+    }
+    
+    totalRows.textContent = appState.combinedData.length;
+    columnCount.textContent = appState.headers.length;
+}
+
+// Export combined data as CSV
+function exportCSV() {
+    if (appState.combinedData.length === 0) {
+        showError('No data to export');
+        return;
+    }
+    
+    // Create CSV content
+    let csvContent = '';
+    
+    // Add headers
+    csvContent += appState.headers.map(escapeCSVField).join(',') + '\n';
+    
+    // Add data rows
+    appState.combinedData.forEach(row => {
+        csvContent += row.map(escapeCSVField).join(',') + '\n';
+    });
+    
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    link.download = `combined_csv_${timestamp}.csv`;
+    
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showSuccess(`Exported ${appState.combinedData.length} rows to ${link.download}`);
+}
+
+// Escape a field for CSV
+function escapeCSVField(field) {
+    if (field === null || field === undefined) {
+        return '""';
+    }
+    
+    const stringField = String(field);
+    
+    // Fields containing commas, quotes, or newlines need to be quoted
+    if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n') || stringField.includes('\r')) {
+        return '"' + stringField.replace(/"/g, '""') + '"';
+    }
+    
+    return stringField;
+}
+
+// Clear all files and data
+function clearAll() {
+    appState.files = [];
+    appState.combinedData = [];
+    appState.originalCombinedData = [];
+    appState.headers = [];
+    fileInput.value = '';
+    
+    resetProcessingOptions();
+    
+    updateFileList();
+    updatePreviewTable();
+    updateUI();
+    updateProcessingUI();
+    
+    showSuccess('All files and data cleared');
+}
+
+// Update UI state
+function updateUI() {
+    const hasFiles = appState.files.length > 0;
+    const hasCombinedData = appState.combinedData.length > 0;
+    const allFilesParsed = appState.files.every(f => f.parsed || f.error);
+    
+    // Update combine button
+    combineBtn.disabled = !hasFiles || !allFilesParsed;
+    
+    // Update export button
+    exportBtn.disabled = !hasCombinedData;
+    
+    // Update clear button
+    clearBtn.disabled = !hasFiles && !hasCombinedData;
+    
+    // Update apply processing button
+    applyProcessingBtn.disabled = !hasCombinedData;
+    
+    // Update reset processing button
+    resetProcessingBtn.disabled = appState.originalCombinedData.length === 0;
+    
+    // Update status
+    if (appState.isProcessing) {
+        status.textContent = 'Processing...';
+        status.style.color = '#f39c12';
+    } else if (hasCombinedData) {
+        status.textContent = 'Ready to export';
+        status.style.color = '#27ae60';
+    } else if (hasFiles) {
+        const parsedCount = appState.files.filter(f => f.parsed).length;
+        status.textContent = `${parsedCount}/${appState.files.length} files parsed`;
+        status.style.color = parsedCount === appState.files.length ? '#27ae60' : '#f39c12';
+    } else {
+        status.textContent = 'Ready';
+        status.style.color = '#3498db';
+    }
+    
+    // Update summary
+    fileCount.textContent = appState.files.length;
+    totalRows.textContent = appState.combinedData.length;
+    columnCount.textContent = appState.headers.length;
+}
+
+// Helper functions
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function arraysEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+// Notification functions
+function showError(message) {
+    showNotification(message, 'error');
+    console.error(message);
+}
+
+function showSuccess(message) {
+    showNotification(message, 'success');
+    console.log(message);
+}
+
+function showNotification(message, type) {
+    // Remove existing notification
+    const existingNotification = document.querySelector('.notification');
+    if (existingNotification) {
+        existingNotification.remove();
+    }
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    
+    // Style the notification
+    notification.style.position = 'fixed';
+    notification.style.top = '20px';
+    notification.style.right = '20px';
+    notification.style.padding = '15px 20px';
+    notification.style.borderRadius = '8px';
+    notification.style.color = 'white';
+    notification.style.fontWeight = '500';
+    notification.style.zIndex = '1000';
+    notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    notification.style.animation = 'fadeIn 0.3s ease';
+    
+    if (type === 'error') {
+        notification.style.backgroundColor = '#e74c3c';
+        notification.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
+    } else {
+        notification.style.backgroundColor = '#27ae60';
+        notification.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+    }
+    
+    // Add icon styling
+    notification.querySelector('i').style.marginRight = '10px';
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.opacity = '0';
+            notification.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 300);
+        }
+    }, 5000);
+}
+
+// Initialize the app when DOM is loaded
+document.addEventListener('DOMContentLoaded', init);

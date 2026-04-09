@@ -1,0 +1,63 @@
+/* Unicode icon styling for offline CSV Combiner */
+.fas {
+    font-family: "Segoe UI Symbol", "Apple Symbols", sans-serif;
+    font-weight: normal;
+    font-style: normal;
+    display: inline-block;
+    text-rendering: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Unicode mapping for Font Awesome icons used in the app */
+.fa-file-csv::before { content: "📊"; }
+.fa-wifi-slash::before { content: "📴"; }
+.fa-cloud-upload-alt::before { content: "⬆️"; }
+.fa-file-import::before { content: "📁"; }
+.fa-table::before { content: "📋"; }
+.fa-cogs::before { content: "⚙️"; }
+.fa-trash::before { content: "🗑️"; }
+.fa-download::before { content: "⬇️"; }
+.fa-file-export::before { content: "📤"; }
+.fa-info-circle::before { content: "ℹ️"; }
+.fa-chart-bar::before { content: "📈"; }
+.fa-shield-alt::before { content: "🛡️"; }
+.fa-exclamation-circle::before { content: "⚠️"; }
+.fa-check-circle::before { content: "✅"; }
+.fa-times::before { content: "✕"; }
+
+/* Size modifiers */
+.fa-2x { font-size: 1.5em; }
+.fa-3x { font-size: 2em; }
+
+/* Adjust specific icons for better alignment */
+.fa-file-csv { margin-right: 8px; }
+.fa-wifi-slash { margin-right: 6px; }
+.fa-cloud-upload-alt,
+.fa-table,
+.fa-download,
+.fa-chart-bar,
+.fa-shield-alt { margin-right: 10px; }
+
+/* For the file import icon in drop zone */
+.file-input-content .fa-file-import {
+    color: #7f8c8d;
+    margin-bottom: 15px;
+}
+
+/* For buttons */
+.btn .fas {
+    margin-right: 8px;
+}
+
+/* For file list */
+#fileList li .fa-file-csv {
+    color: #3498db;
+    margin-right: 10px;
+}
+
+/* For remove button in file list */
+#fileList li button .fa-times {
+    color: #e74c3c;
+    margin: 0;
+}

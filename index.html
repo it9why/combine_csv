@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Combiner - Offline Tool</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="icons.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-file-csv"></i> CSV Combiner</h1>
+            <p class="subtitle">Combine multiple CSV files offline. No data leaves your browser.</p>
+            <div class="offline-indicator">
+                <i class="fas fa-wifi-slash"></i> Works completely offline
+            </div>
+        </header>
+
+        <main>
+            <section class="upload-section">
+                <h2><i class="fas fa-cloud-upload-alt"></i> 1. Select CSV Files</h2>
+                <p>Choose multiple CSV files with identical headers (first row).</p>
+                <div class="file-input-area" id="dropZone">
+                    <input type="file" id="fileInput" accept=".csv,text/csv" multiple>
+                    <div class="file-input-content">
+                        <i class="fas fa-file-import fa-3x"></i>
+                        <h3>Drag & Drop CSV Files</h3>
+                        <p>or click to browse</p>
+                        <p class="file-info">Supported: .csv files with same header structure</p>
+                    </div>
+                </div>
+                <div class="selected-files" id="selectedFiles">
+                    <h3>Selected Files:</h3>
+                    <ul id="fileList"></ul>
+                </div>
+            </section>
+
+            <section class="preview-section">
+                <h2><i class="fas fa-table"></i> 2. Preview Combined Data</h2>
+                <div class="controls">
+                    <button id="combineBtn" class="btn btn-primary">
+                        <i class="fas fa-cogs"></i> Combine Files
+                    </button>
+                    <button id="clearBtn" class="btn btn-secondary">
+                        <i class="fas fa-trash"></i> Clear All
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table id="previewTable">
+                        <thead id="tableHeader">
+                            <tr>
+                                <th>Filename</th>
+                                <!-- Headers will be populated here -->
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <!-- Data rows will be populated here -->
+                        </tbody>
+                    </table>
+                    <div id="noDataMessage">
+                        <i class="fas fa-table fa-2x"></i>
+                        <p>Combined data will appear here</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="processing-section">
+                <h2><i class="fas fa-filter"></i> 3. Process Combined Data</h2>
+                <p>Apply filters and transformations to the combined data.</p>
+                
+                <div class="processing-controls">
+                    <div class="processing-option">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="removeDuplicates">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">Remove duplicate rows (all columns must match)</span>
+                        </label>
+                        <div class="option-description">
+                            Removes rows where all column values are identical across the entire dataset.
+                        </div>
+                    </div>
+                    
+                    <div class="processing-option">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enableUniqueColumns">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">Ensure unique values in selected columns</span>
+                        </label>
+                        <div class="option-description">
+                            Select columns where all values must be unique. Duplicate rows based on these columns will be removed (keeping first occurrence).
+                        </div>
+                        
+                        <div class="unique-columns-selector" id="uniqueColumnsSelector" style="display: none; margin-top: 15px;">
+                            <div class="selector-label">Select columns to enforce uniqueness:</div>
+                            <div class="columns-checkbox-list" id="columnsCheckboxList">
+                                <!-- Column checkboxes will be populated here -->
+                            </div>
+                            <div class="selector-note">
+                                <i class="fas fa-info-circle"></i> When duplicates are found, the first occurrence is kept.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="processing-buttons">
+                        <button id="applyProcessingBtn" class="btn btn-primary">
+                            <i class="fas fa-play-circle"></i> Apply Processing
+                        </button>
+                        <button id="resetProcessingBtn" class="btn btn-secondary">
+                            <i class="fas fa-undo"></i> Reset to Original
+                        </button>
+                    </div>
+                    
+                    <div class="processing-stats" id="processingStats" style="display: none;">
+                        <h4><i class="fas fa-chart-line"></i> Processing Results</h4>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-label">Original Rows</div>
+                                <div class="stat-value" id="originalRows">0</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Rows Removed</div>
+                                <div class="stat-value" id="rowsRemoved">0</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Remaining Rows</div>
+                                <div class="stat-value" id="remainingRows">0</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Duplicate Rows</div>
+                                <div class="stat-value" id="duplicateRows">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="export-section">
+                <h2><i class="fas fa-download"></i> 4. Export Combined CSV</h2>
+                <p>Download the combined CSV file with filename column added.</p>
+                <div class="export-controls">
+                    <button id="exportBtn" class="btn btn-success" disabled>
+                        <i class="fas fa-file-export"></i> Export Combined CSV
+                    </button>
+                    <div class="export-info">
+                        <p><i class="fas fa-info-circle"></i> First column will contain the source filename</p>
+                        <p><i class="fas fa-info-circle"></i> Processing filters will be applied to exported data</p>
+                    </div>
+                </div>
+                <div class="summary" id="summary">
+                    <h3><i class="fas fa-chart-bar"></i> Summary</h3>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <div class="summary-label">Files Loaded</div>
+                            <div class="summary-value" id="fileCount">0</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Total Rows</div>
+                            <div class="summary-value" id="totalRows">0</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Columns</div>
+                            <div class="summary-value" id="columnCount">0</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Status</div>
+                            <div class="summary-value" id="status">Ready</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>CSV Combiner &copy; 2025 - A static offline tool. No server communication required.</p>
+            <p class="footer-note">
+                <i class="fas fa-shield-alt"></i> All processing happens locally in your browser.
+                Your data never leaves your computer.
+            </p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
