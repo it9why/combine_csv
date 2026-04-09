@@ -459,15 +459,29 @@ function combineFiles() {
     
     // Validate that all files have the same headers
     let commonHeaders = null;
+    const mismatchedFiles = [];
+    
     for (const fileObj of appState.files) {
         if (!fileObj.parsed) continue;
         
         if (commonHeaders === null) {
             commonHeaders = fileObj.parsed.headers;
         } else if (!arraysEqual(commonHeaders, fileObj.parsed.headers)) {
-            showError('Files have different headers. All CSV files must have identical headers.');
-            return;
+            mismatchedFiles.push(fileObj.name);
         }
+    }
+    
+    // If there are mismatched files, show detailed error
+    if (mismatchedFiles.length > 0) {
+        let errorMessage = 'Files have different headers. All CSV files must have identical headers.\n\n';
+        errorMessage += `Reference headers (from first file): ${commonHeaders.join(', ')}\n\n`;
+        errorMessage += `Files with different headers (${mismatchedFiles.length}):\n`;
+        mismatchedFiles.forEach(filename => {
+            errorMessage += `• ${filename}\n`;
+        });
+        errorMessage += '\nPlease check your CSV files and ensure they all have the same column structure.';
+        showError(errorMessage);
+        return;
     }
     
     if (!commonHeaders) {
